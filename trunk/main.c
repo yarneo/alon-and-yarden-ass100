@@ -51,9 +51,8 @@ mainc(void)
   if(!ismp)
     timerinit();   // uniprocessor timer
   userinit();      // first user process
+  createInternalProcess("swapper", swap);
   bootothers();    // start other processors
-  createInternalProcess("swapper", swap());
-
   // Finish setting up this processor in mpmain.
   mpmain();
 }

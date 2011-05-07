@@ -9,7 +9,10 @@
 
 #define USERTOP  0xA0000
 
-int swapper_run = 0;
+extern int swapin;
+extern int swapout;
+int startnoswap = 0;
+
 static pde_t *kpgdir;  // for use in scheduler()
 
 // Set up CPU's kernel segment descriptors.
@@ -175,9 +178,10 @@ switchuvm(struct proc *p)
   cpu->ts.esp0 = (uint)proc->kstack + KSTACKSIZE;
   ltr(SEG_TSS << 3);
 
-  if(p->pgdir == 0)
+  if(p->pgdir == 0) {
+	  cprintf("papaap %d",proc->pid);
     panic("switchuvm: no pgdir\n");
-
+  }
   lcr3(PADDR(p->pgdir));  // switch to new address space
   popcli();
 }
@@ -323,16 +327,123 @@ bad:
   return 0;
 }
 
-void*
+
+/* reverse:  reverse string s in place */
+void reverse(char s[])
+{
+   int i, j;
+   char c;
+
+   for (i = 0, j = strlen(s)-1; i<j; i++, j--) {
+       c = s[i];
+       s[i] = s[j];
+       s[j] = c;
+   }
+}
+
+/* itoa:  convert n to characters in s */
+void itoa(int n, char s[])
+{
+    int i, sign;
+
+    if ((sign = n) < 0)  /* record sign */
+        n = -n;          /* make n positive */
+    i = 0;
+    do {       /* generate digits in reverse order */
+        s[i++] = n % 10 + '0';   /* get next digit */
+    } while ((n /= 10) > 0);     /* delete it */
+    if (sign < 0)
+        s[i++] = '-';
+    s[i] = '\0';
+    reverse(s);
+}
+
+char *
+strcat(char *dest, const char *src)
+{
+   int i,j;
+   for (i = 0; dest[i] != '\0'; i++)
+       ;
+   for (j = 0; src[j] != '\0'; j++)
+       dest[i+j] = src[j];
+   dest[i+j] = '\0';
+   return dest;
+}
+
+void
 swap()
 {
-if(swapper_run) {
- int fd = open2("lol",(O_RDWR | O_CREATE));
-           if(fd < 0) {
-                 panic("problem opening file");
-           }
-}
-return 0;
+	int i;
+	int fd = 0;
+swapout=1;
+	for(;;) {
+		//	cprintf("swapout value is: %d\n",swapout);
+	if(startnoswap) {
+//	//pushcli(); //no interrupts
+	//cprintf("my name is the little coon\n");
+	if(swapin) {
+		cprintf("swapin\n");
+		struct file* fin = open2("1.swap",O_RDWR,fd);
 
+		  pde_t *d = setupkvm();
+		  char *mem;
+		 // char read[PGSIZE];
+
+		  if(!d) {
+			  panic("cannot allocate pgdir for swapping in");
+		  }
+		  for(i = 0; i < swapoutproc->sz; i += PGSIZE){
+//			  if(!(pte = walkpgdir(pgdir, (void *)i, 0)))
+//				  panic("copyuvm: pte should exist\n");
+//			  if(!(*pte & PTE_P))
+//				  panic("copyuvm: page not present\n");
+//			  pa = PTE_ADDR(*pte);
+
+
+			  if(!(mem = kalloc())) {
+				  freevm(d);
+				  panic("cannot map pages when swapping in");
+			  }
+			  if(fileread(fin, mem, PGSIZE) < 0) {
+				  panic("error reading swap file");
+			  }
+			//  memmove(mem, (char *)read, PGSIZE);
+			  if(!mappages(d, (void *)i, PGSIZE, PADDR(mem), PTE_W|PTE_U)) {
+				  freevm(d);
+				  panic("cannot map pages when swapping in");
+			  }
+		  }
+		proc->ofile[fd] = 0;
+		fileclose(fin);
+		if(unlink2("1.swap") < 0) {
+			panic("cannot unlink swap file");
+		}
+		swapin = 0;
+	}
+	else if(swapout) {
+		cprintf("swapout\n");
+		int pid = swapoutproc->pid;
+		char str[11];
+		char* ext = ".swap";
+		itoa(pid,str);
+		char* filename = strcat(str,ext);
+		struct file* fout = open2(filename,O_CREATE | O_RDWR,fd);
+		for(i = 0; i < (swapoutproc->sz); i+=PGSIZE){
+		if(filewrite(fout, uva2ka(swapoutproc->pgdir, (void *) i), PGSIZE) < 0) {
+			panic("error swapping");
+		}
+		}
+		freevm(swapoutproc->pgdir);
+
+		proc->ofile[fd] = 0;
+		fileclose(fout);
+		swapout = 0;
+		swapin = 1;
+	}
+	//popcli(); //end of no interrupts
+	}
+	startnoswap=1;
+	yield();
+	}
 }
 
