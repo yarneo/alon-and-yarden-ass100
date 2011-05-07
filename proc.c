@@ -14,8 +14,15 @@ struct {
 static struct proc *initproc;
 static struct proc *swapper;
 
+
+int swapin = 0;
+int swapout = 0;
+int toswap = 0;
+extern int free_pages;
+
+
+
 int nextpid = 1;
-extern int swapper_run;
 extern void forkret(void);
 extern void trapret(void);
 
@@ -140,45 +147,60 @@ userinit(void)
 
 void createInternalProcess(const char *name, void (*entrypoint)()) {
   char *sp;
+  struct proc *p;
   extern char _binary_initcode_start[], _binary_initcode_size[];
-  
-  swapper->state = KERNEL;
-  swapper->pid = nextpid++;
-  if((swapper->kstack = kalloc()) == 0){
-	panic("cannot allocate kernel stack to the swapper");
+
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+    if(p->state == UNUSED)
+      goto swapfound;
+  release(&ptable.lock);
+  panic("no room in ptable for swapper");
+
+swapfound:
+  p->state = EMBRYO;
+  p->pid = nextpid++;
+  release(&ptable.lock);
+
+  // Allocate kernel stack if possible.
+  if((p->kstack = kalloc()) == 0){
+    p->state = UNUSED;
+    panic("cant allocate kernel stack for swapper");
   }
-  sp = swapper->kstack + KSTACKSIZE;
- // Leave room for trap frame.
-  sp -= sizeof *swapper->tf;
-  swapper->tf = (struct trapframe*)sp;
-  
+  sp = p->kstack + KSTACKSIZE;
+
+  // Leave room for trap frame.
+  sp -= sizeof *p->tf;
+  p->tf = (struct trapframe*)sp;
+
   // Set up new context to start executing at forkret,
-  // which returns to trapret (see below).
+  // which returns to entrypoint (see below).
   sp -= 4;
-  //*(uint*)sp = (uint)trapret;
   *(uint*)sp = (uint)entrypoint;
 
-  sp -= sizeof *swapper->context;
-  swapper->context = (struct context*)sp;
-  memset(swapper->context, 0, sizeof *swapper->context);
-  swapper->context->eip = (uint)forkret;
+  sp -= sizeof *p->context;
+  p->context = (struct context*)sp;
+  memset(p->context, 0, sizeof *p->context);
+  p->context->eip = (uint)forkret;
+  swapper = p;
+
 
   if(!(swapper->pgdir = setupkvm()))
-    panic("userinit: out of memory?");
-  inituvm(swapper->pgdir, _binary_initcode_start, (int)_binary_initcode_size);
+    panic("swapper: out of memory?");
+//  inituvm(swapper->pgdir, _binary_initcode_start, (int)_binary_initcode_size);
   swapper->sz = PGSIZE;
   memset(swapper->tf, 0, sizeof(*swapper->tf));
-  //swapper->tf->cs = (SEG_UCODE << 3) | DPL_USER;
-  //swapper->tf->ds = (SEG_UDATA << 3) | DPL_USER;
-  //swapper->tf->es = swapper->tf->ds;
-  //swapper->tf->ss = swapper->tf->ds;
-  //swapper->tf->eflags = FL_IF;
-  //swapper->tf->esp = PGSIZE;
-  //swapper->tf->eip = (uint) entrypoint;
-
+//  swapper->tf->cs = (SEG_UCODE << 3) | DPL_USER;
+//  swapper->tf->ds = (SEG_UDATA << 3) | DPL_USER;
+//  swapper->tf->es = swapper->tf->ds;
+//  swapper->tf->ss = swapper->tf->ds;
+//  swapper->tf->eflags = FL_IF;
+//  swapper->tf->esp = PGSIZE;
+//  swapper->tf->eip = 0;
   safestrcpy(swapper->name, name, sizeof(swapper->name));
   swapper->cwd = namei("/");
-  cprintf("MRMR %d MRMR",swapper->pid);
+  swapper->state = KERNEL;
+  cprintf("swapper pid: %d\n",swapper->pid);
 }
 
 
@@ -343,22 +365,39 @@ scheduler(void)
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
 
-    if(tmpy==0) {
-    swapper_run = 1;
-    proc = swapper;
-    cprintf("HELLLO\n");
-    switchuvm(swapper);
-    cprintf("LALA\n");
-    swtch(&cpu->scheduler, proc->context);
-    cprintf("LAHHHHH\n");
-    switchkvm();
-    proc = 0;
-    tmpy=1;
-    }
 
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
+
+//    	cprintf("free pages is: %d\n",free_pages);
+    	if((double)(((double)free_pages / (double)NUMOFPAGES)*100) <= MEM_T) {
+#ifdef MIN
+   struct proc *np;
+   for(np = ptable.proc; np < &ptable.proc[NPROC]; np++){
+
+   }
+
+#elif MAX
+
+#endif
+    	}
+    	//cprintf("well");
+        if((toswap % 10000) == 10) {
+        	//cprintf("hehe");
+           swapoutproc = &ptable.proc[0];
+           proc = swapper;
+           switchuvm(swapper);
+           swapper->state = RUNNING;
+           swtch(&cpu->scheduler, proc->context);
+           switchkvm();
+           proc = 0;
+           //swapin = 1;
+        }
+        toswap++;
+
+      if((p->state != RUNNABLE) || (p == swapper)) {
+    	  //cprintf("well");
         continue;
+      }
 
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it

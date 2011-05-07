@@ -8,6 +8,9 @@
 #include "mmu.h"
 #include "spinlock.h"
 
+int free_pages = 4096;
+struct spinlock fpcount;
+
 struct run {
   struct run *next;
 };
@@ -49,6 +52,10 @@ kfree(char *v)
   r->next = kmem.freelist;
   kmem.freelist = r;
   release(&kmem.lock);
+
+  acquire(&fpcount);
+  free_pages++;
+  release(&fpcount);
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -64,6 +71,11 @@ kalloc()
   if(r)
     kmem.freelist = r->next;
   release(&kmem.lock);
+
+  acquire(&fpcount);
+  free_pages--;
+  release(&fpcount);
+
   return (char*) r;
 }
 
