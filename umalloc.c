@@ -48,7 +48,7 @@ morecore(uint nu)
 {
   char *p;
   Header *hp;
-
+//printf(1,"pid: %d is in morecore\n",getpid());
   if(nu < 4096)
     nu = 4096;
   p = sbrk(nu * sizeof(Header));

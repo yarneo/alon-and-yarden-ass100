@@ -22,6 +22,7 @@ main(void)
   consoleinit();   // I/O devices & their interrupts
   uartinit();      // serial port
   kinit();         // initialize memory allocator
+	free_pages = 4096;
   jkstack();       // call mainc() on a properly-allocated stack 
 }
 

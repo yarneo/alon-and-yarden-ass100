@@ -72,7 +72,8 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
- // int allocpages;			   // Number of allocated pages for the current process
+  uint swapped;			       // if the processes page directory is swapped out or not, 1=swapped out
+  uint swaps;				   // number of swaps done by the process
 };
 
 // Process memory is laid out contiguously, low addresses first:
@@ -82,3 +83,7 @@ struct proc {
 //   expandable heap
 
 struct proc *swapoutproc;
+struct proc *swapinproc;
+volatile int free_pages;
+volatile int swapin;
+volatile int swapout;
