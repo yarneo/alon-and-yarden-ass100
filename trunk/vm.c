@@ -9,8 +9,6 @@
 
 #define USERTOP  0xA0000
 
-extern int swapin;
-extern int swapout;
 int startnoswap = 0;
 
 static pde_t *kpgdir;  // for use in scheduler()
@@ -375,75 +373,78 @@ swap()
 {
 	int i;
 	int fd = 0;
-swapout=1;
+	swapout=1;
 	for(;;) {
-		//	cprintf("swapout value is: %d\n",swapout);
-	if(startnoswap) {
-//	//pushcli(); //no interrupts
-	//cprintf("my name is the little coon\n");
-	if(swapin) {
-		cprintf("swapin\n");
-		struct file* fin = open2("1.swap",O_RDWR,fd);
+		//cprintf("swapout value is: %d\n",swapout);
+		if(startnoswap) {
+			//pushcli(); //no interrupts
+			//cprintf("my name is the little coon\n");
+			if(swapin) {
+				cprintf("swapin\n");
+				struct file* fin = open2("1.swap",O_RDWR,fd);
 
-		  pde_t *d = setupkvm();
-		  char *mem;
-		 // char read[PGSIZE];
+				pde_t *d = setupkvm();
+				char *mem;
+				// char read[PGSIZE];
 
-		  if(!d) {
-			  panic("cannot allocate pgdir for swapping in");
-		  }
-		  for(i = 0; i < swapoutproc->sz; i += PGSIZE){
-//			  if(!(pte = walkpgdir(pgdir, (void *)i, 0)))
-//				  panic("copyuvm: pte should exist\n");
-//			  if(!(*pte & PTE_P))
-//				  panic("copyuvm: page not present\n");
-//			  pa = PTE_ADDR(*pte);
+				if(!d) {
+					panic("cannot allocate pgdir for swapping in");
+				}
+				for(i = 0; i < swapinproc->sz; i += PGSIZE){
+					//			  if(!(pte = walkpgdir(pgdir, (void *)i, 0)))
+					//				  panic("copyuvm: pte should exist\n");
+					//			  if(!(*pte & PTE_P))
+					//				  panic("copyuvm: page not present\n");
+					//			  pa = PTE_ADDR(*pte);
 
 
-			  if(!(mem = kalloc())) {
-				  freevm(d);
-				  panic("cannot map pages when swapping in");
-			  }
-			  if(fileread(fin, mem, PGSIZE) < 0) {
-				  panic("error reading swap file");
-			  }
-			//  memmove(mem, (char *)read, PGSIZE);
-			  if(!mappages(d, (void *)i, PGSIZE, PADDR(mem), PTE_W|PTE_U)) {
-				  freevm(d);
-				  panic("cannot map pages when swapping in");
-			  }
-		  }
-		proc->ofile[fd] = 0;
-		fileclose(fin);
-		if(unlink2("1.swap") < 0) {
-			panic("cannot unlink swap file");
+					if(!(mem = kalloc())) {
+						freevm(d);
+						panic("cannot map pages when swapping in");
+					}
+					if(fileread(fin, mem, PGSIZE) < 0) {
+						panic("error reading swap file");
+					}
+					//  memmove(mem, (char *)read, PGSIZE);
+					if(!mappages(d, (void *)i, PGSIZE, PADDR(mem), PTE_W|PTE_U)) {
+						freevm(d);
+						panic("cannot map pages when swapping in");
+					}
+				}
+				swapinproc->pgdir = d;
+				proc->ofile[fd] = 0;
+				fileclose(fin);
+				if(unlink2("1.swap") < 0) {
+					panic("cannot unlink swap file");
+				}
+				proc->swapped = 0;
+				proc->swaps++;
+				swapin = 0;
+			}
+			else if(swapout) {
+				cprintf("swapout\n");
+				int pid = swapoutproc->pid;
+				char str[11];
+				char* ext = ".swap";
+				itoa(pid,str);
+				char* filename = strcat(str,ext);
+				struct file* fout = open2(filename,O_CREATE | O_RDWR,fd);
+				for(i = 0; i < (swapoutproc->sz); i+=PGSIZE){
+					if(filewrite(fout, uva2ka(swapoutproc->pgdir, (void *) i), PGSIZE) < 0) {
+						panic("error swapping");
+					}
+				}
+				freevm(swapoutproc->pgdir);
+
+				proc->ofile[fd] = 0;
+				fileclose(fout);
+				proc->swapped = 1;
+				swapout = 0;
+			}
+			//popcli(); //end of no interrupts
 		}
-		swapin = 0;
-	}
-	else if(swapout) {
-		cprintf("swapout\n");
-		int pid = swapoutproc->pid;
-		char str[11];
-		char* ext = ".swap";
-		itoa(pid,str);
-		char* filename = strcat(str,ext);
-		struct file* fout = open2(filename,O_CREATE | O_RDWR,fd);
-		for(i = 0; i < (swapoutproc->sz); i+=PGSIZE){
-		if(filewrite(fout, uva2ka(swapoutproc->pgdir, (void *) i), PGSIZE) < 0) {
-			panic("error swapping");
-		}
-		}
-		freevm(swapoutproc->pgdir);
-
-		proc->ofile[fd] = 0;
-		fileclose(fout);
-		swapout = 0;
-		swapin = 1;
-	}
-	//popcli(); //end of no interrupts
-	}
-	startnoswap=1;
-	yield();
+		startnoswap=1;
+		yield();
 	}
 }
 

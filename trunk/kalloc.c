@@ -7,8 +7,8 @@
 #include "param.h"
 #include "mmu.h"
 #include "spinlock.h"
+#include "proc.h"
 
-int free_pages = 4096;
 struct spinlock fpcount;
 
 struct run {

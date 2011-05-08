@@ -14,13 +14,9 @@ struct {
 static struct proc *initproc;
 static struct proc *swapper;
 
-
-int swapin = 0;
-int swapout = 0;
-int toswap = 0;
-extern int free_pages;
-
-
+//int toswap = 0;
+int proc_count = 0;
+extern volatile int free_pages;
 
 int nextpid = 1;
 extern void forkret(void);
@@ -62,7 +58,13 @@ procdump(void)
       state = states[p->state];
     else
       state = "???";
-    cprintf("%d %s %s", p->pid, state, p->name);
+	uint pges = p->sz/PGSIZE;
+    if(p->swapped == 0) {
+    cprintf("%d %s %d %d %s", p->pid, state, pges, p->swaps, p->name);
+    }
+    else {
+        cprintf("%d %s %d %d/S %s", p->pid, state, pges, p->swaps, p->name);
+    }
     if(p->state == SLEEPING){
       getcallerpcs((uint*)p->context->ebp+2, pc);
       for(i=0; i<10 && pc[i] != 0; i++)
@@ -70,6 +72,8 @@ procdump(void)
     }
     cprintf("\n");
   }
+  int frper = ((double)free_pages/(double)NUMOFPAGES)*100;
+  cprintf("%d%% free pages in the system\n",frper);
 }
 
 
@@ -92,6 +96,8 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->swapped = 0;
+  p->swaps = 0;
   release(&ptable.lock);
 
   // Allocate kernel stack if possible.
@@ -114,6 +120,7 @@ found:
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
+  proc_count++;
   return p;
 }
 
@@ -200,6 +207,7 @@ swapfound:
   safestrcpy(swapper->name, name, sizeof(swapper->name));
   swapper->cwd = namei("/");
   swapper->state = KERNEL;
+  proc_count++;
   cprintf("swapper pid: %d\n",swapper->pid);
 }
 
@@ -330,6 +338,8 @@ wait(void)
         p->parent = 0;
         p->name[0] = 0;
         p->killed = 0;
+        p->swapped = 0;
+        p->swaps = 0;
         release(&ptable.lock);
         return pid;
       }
@@ -368,36 +378,87 @@ scheduler(void)
 
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
 
-//    	cprintf("free pages is: %d\n",free_pages);
-    	if((double)(((double)free_pages / (double)NUMOFPAGES)*100) <= MEM_T) {
+    	//    	cprintf("free pages is: %d\n",free_pages);
+#ifndef NOTHING
+    	struct proc *np;
+    	while(((double)(((double)free_pages / (double)NUMOFPAGES)*100) <= MEM_T) && (proc_count > 4)) {
 #ifdef MIN
-   struct proc *np;
-   for(np = ptable.proc; np < &ptable.proc[NPROC]; np++){
-
-   }
-
+    		uint minsz = 0xA0000;
+    		swapoutproc = 0;
+    		for(np = &ptable.proc[3]; np < &ptable.proc[NPROC]; np++){
+    			if((np->sz < minsz) && (np->state = RUNNABLE)) {
+    				swapoutproc = np;
+    			}
+    		}
+    		if(swapoutproc == 0) {
+    			cprintf("no runnable process to swap out\n");
+    		}
+    		else {
+    			swapout = 1;
+    			proc_count--;
+    			proc = swapper;
+    			switchuvm(swapper);
+    			swapper->state = RUNNING;
+    			swtch(&cpu->scheduler, proc->context);
+    			switchkvm();
+    			proc = 0;
+    		}
 #elif MAX
-
+    		uint maxsz = 0;
+    		swapoutproc = 0;
+    		for(np = &ptable.proc[3]; np < &ptable.proc[NPROC]; np++){
+    			if((np->sz < maxsz) && (np->state = RUNNABLE)) {
+    				swapoutproc = np;
+    			}
+    		}
+    		if(swapoutproc == 0) {
+    			cprintf("no runnable process to swap out\n");
+    		}
+    		else {
+    			swapout = 1;
+    			proc_count--;
+    			proc = swapper;
+    			switchuvm(swapper);
+    			swapper->state = RUNNING;
+    			swtch(&cpu->scheduler, proc->context);
+    			switchkvm();
+    			proc = 0;
+    		}
 #endif
     	}
-    	//cprintf("well");
-        if((toswap % 10000) == 10) {
-        	//cprintf("hehe");
-           swapoutproc = &ptable.proc[0];
-           proc = swapper;
-           switchuvm(swapper);
-           swapper->state = RUNNING;
-           swtch(&cpu->scheduler, proc->context);
-           switchkvm();
-           proc = 0;
-           //swapin = 1;
-        }
-        toswap++;
+#endif
+
+//    	//cprintf("well");
+//        if((toswap % 10000) == 10) {
+//        	//cprintf("hehe");
+//           swapoutproc = &ptable.proc[0];
+//           swapinproc = &ptable.proc[0];
+//           proc = swapper;
+//           switchuvm(swapper);
+//           swapper->state = RUNNING;
+//           swtch(&cpu->scheduler, proc->context);
+//           switchkvm();
+//           proc = 0;
+//           //swapin = 1;
+//        }
+//        toswap++;
 
       if((p->state != RUNNABLE) || (p == swapper)) {
     	  //cprintf("well");
         continue;
       }
+
+
+      if(p->swapped == 1) {
+    	  swapin=1;
+          proc = swapper;
+          switchuvm(swapper);
+          swapper->state = RUNNING;
+          swtch(&cpu->scheduler, proc->context);
+          switchkvm();
+          proc = 0;
+      }
+
 
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
