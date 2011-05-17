@@ -10,22 +10,30 @@ main(void)
 	int n,pid,i,j,k;
 
 	printf(1,"sanity test\n");
-
+	int l,m=0;
 	for(n=1; n<N+1; n++) {
 		pid = fork();
 		if(pid == 0) {//children
 			for(j=0;j<1;j++) {
 				for(k=0;k<4096;k++) {
 					for(i=0;i<n;i++) {
-						char* mced = malloc(1);
-						*mced = 0;
-						//sleep(1);
+						char* mced;
+						if((mced = sbrk(0)) >= 0){
+							if(sbrk(1) >= 0){
+								*mced = 0;
+							}
+						}
+						for(l=0;l<100000;l++) {
+							m++;
+						}
 						//printf(3,"stam");
 						//printf(1,"lol");
 						//;
 					}
+					//sleep(1);
 				}
 			}
+			printf(1,"%d",m);
 			//printf(1,"lol\n");
 			//while(1);
 			exit();

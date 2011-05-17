@@ -593,18 +593,22 @@ swap()
 #ifdef MIN
 			struct proc* np;
 			uint minsz = 0xA0000;
+			uint minswa = 1000000;
 			swapoutproc = 0;
 			acquire(&ptable.lock);
 			for(np = &ptable.proc[3]; np < &ptable.proc[NPROC]; np++){
-				if((np->sz < minsz) && (np->state == RUNNABLE) && (np->swapped == 0)) {
+				if((np->sz <= minsz) && (np->state == RUNNABLE) && (np->swapped == 0) && ((np->sz/PGSIZE) < 18)) {
+					if(np->sz < minsz || (np->sz == minsz && np->swaps < minswa)) {
+					minswa = np->swaps;
 					minsz = np->sz;
 					swapoutproc = np;
+					}
 				}
 			}
 			if(swapoutproc == 0) {
 				flee++;
 				release(&ptable.lock);
-				if(flee > 200)
+				if(flee > 2)
 					break;
 				yield();
 			}
@@ -619,7 +623,7 @@ swap()
 			swapoutproc = 0;
 			acquire(&ptable.lock);
 			for(np = &ptable.proc[3]; np < &ptable.proc[NPROC]; np++){
-				if((np->sz > maxsz) && (np->state == RUNNABLE) && (np->swapped == 0)) {
+				if((np->sz > maxsz) && (np->state == RUNNABLE) && (np->swapped == 0) && ((np->sz/PGSIZE) < 18)) {
 					maxsz = np->sz;
 					swapoutproc = np;
 				}
@@ -627,7 +631,7 @@ swap()
 			if(swapoutproc == 0) {
 				flee++;
 				release(&ptable.lock);
-				if(flee > 200)
+				if(flee > 2)
 					break;
 				yield();
 			}
@@ -644,12 +648,15 @@ swap()
 				char* ext = ".swap";
 				itoa(pid,str);
 				char* filename = strcat(str,ext);
+				//cprintf("before open\n");
 				struct file* fout = open2(filename,O_CREATE | O_RDWR,fd);
+				//cprintf("after open\n");
 				for(i = 0; i < (swapoutproc->sz); i+=PGSIZE){
 					if(filewrite(fout, uva2ka(swapoutproc->pgdir, (void *) i), PGSIZE) < 0) {
-						panic("error swapping");
+						panic("error swapping\n");
 					}
 				}
+				//cprintf("after writing to file");
 				if(swapoutproc->pid != 0)
 					freevm(swapoutproc->pgdir);
 				proc->ofile[fd] = 0;
@@ -668,7 +675,7 @@ swap()
 		}
 		flee = 0;
 		//sleep2(1);
-		yield();
+		//yield();
 
 		if(swapin) {
 			cprintf("pid: %d , swapin\n",swapinproc->pid);
@@ -716,7 +723,7 @@ swap()
 			cprintf("%d finished swapping in\n",swapinproc->pid);
 		}
 
-		//yield();
+		yield();
 	}
 }
 
