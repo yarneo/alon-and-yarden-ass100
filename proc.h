@@ -74,6 +74,7 @@ struct proc {
   char name[16];               // Process name (debugging)
   uint swapped;			       // if the processes page directory is swapped out or not, 1=swapped out
   uint swaps;				   // number of swaps done by the process
+  uint busyswapping;		   // if in progress of swapping out, dont run it!
 };
 
 // Process memory is laid out contiguously, low addresses first:
@@ -82,8 +83,8 @@ struct proc {
 //   fixed-size stack
 //   expandable heap
 
-struct proc *swapoutproc;
-struct proc *swapinproc;
-volatile int free_pages;
-volatile int swapin;
-volatile int swapout;
+struct proc *swapoutproc; 	   // process to swap out
+struct proc *swapinproc;	   // process to swap in
+volatile int free_pages;	   // number of free pages in the system
+volatile int swapin;		   // 1-we want to execute a swapping in, 0-otherwise
+volatile int swapout;		   // 1-we want to execute a swapping out, 0-otherwise

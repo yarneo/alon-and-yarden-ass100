@@ -7,6 +7,7 @@
 #include "fs.h"
 #include "file.h"
 #include "fcntl.h"
+#include "spinlock.h"
 
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
@@ -398,7 +399,6 @@ open2(char* path, int omode, int fd)
   if(omode & O_CREATE){
     if((ip = create(path, T_FILE, 0, 0)) == 0) {
       panic("panic 1");
-
     }
   } else {
     if((ip = namei(path)) == 0)
@@ -416,7 +416,6 @@ open2(char* path, int omode, int fd)
     panic("panic 4");
   }
   iunlock(ip);
-
   f->type = FD_INODE;
   f->ip = ip;
   f->off = 0;
@@ -470,4 +469,47 @@ unlink2(char* path)
   iupdate(ip);
   iunlockput(ip);
   return 0;
+}
+
+
+/* reverse:  reverse string s in place */
+void reverse(char s[])
+{
+	int i, j;
+	char c;
+
+	for (i = 0, j = strlen(s)-1; i<j; i++, j--) {
+		c = s[i];
+		s[i] = s[j];
+		s[j] = c;
+	}
+}
+
+/* itoa:  convert n to characters in s */
+void itoa(int n, char s[])
+{
+	int i, sign;
+
+	if ((sign = n) < 0)  /* record sign */
+		n = -n;          /* make n positive */
+	i = 0;
+	do {       /* generate digits in reverse order */
+		s[i++] = n % 10 + '0';   /* get next digit */
+	} while ((n /= 10) > 0);     /* delete it */
+	if (sign < 0)
+		s[i++] = '-';
+	s[i] = '\0';
+	reverse(s);
+}
+
+char *
+strcat(char *dest, const char *src)
+{
+	int i,j;
+	for (i = 0; dest[i] != '\0'; i++)
+		;
+	for (j = 0; src[j] != '\0'; j++)
+		dest[i+j] = src[j];
+	dest[i+j] = '\0';
+	return dest;
 }
