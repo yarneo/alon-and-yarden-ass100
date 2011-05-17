@@ -60,7 +60,10 @@ main(void)
 			for(j=0;j<1;j++) {
 				for(k=0;k<4096;k++) {
 					for(i=0;i<n;i++) {
-						memset(malloc(1),0,1);
+						char* mem;
+						if((mem = malloc(1)) != 0) {
+							memset(mem,0,1);
+						}
 					}
 				}
 			}
@@ -74,7 +77,7 @@ main(void)
 			}
 			else {
 			for(j=1000;j>0;j--) {
-				printf(fd,"process: %d, num: %d\n",getpid(),j);
+				printf(fd,"x");
 			}
 			close(fd);
 			}
