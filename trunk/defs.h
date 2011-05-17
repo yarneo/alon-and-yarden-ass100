@@ -106,7 +106,8 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
-void		createInternalProcess(const char*, void());
+void		    createInternalProcess(const char*, void());
+void		    swap(void);
 
 // swtch.S
 void            swtch(struct context**, struct context*);
@@ -165,10 +166,13 @@ int             loaduvm(pde_t*, char*, struct inode *, uint, uint);
 pde_t*          copyuvm(pde_t*,uint);
 void            switchuvm(struct proc*);
 void            switchkvm();
-void		swap(void);
+int				mappages(pde_t*,void*,uint,uint,int);
 
 struct file*		open2(char*, int, int);
 int					unlink2(char*);
+void 				reverse(char[]);
+void 				itoa(int, char[]);
+char*				strcat(char*, const char*);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
