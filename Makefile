@@ -150,6 +150,7 @@ UPROGS=\
 	_memtest\
 	_test\
 	_test2\
+	_memtest2\
 
 fs.img: mkfs README $(UPROGS)
 	./mkfs fs.img README $(UPROGS)

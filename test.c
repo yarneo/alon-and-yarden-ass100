@@ -76,10 +76,10 @@ main(void)
 				printf(2,"ERROR");
 			}
 			else {
-			for(j=1000;j>0;j--) {
-				printf(fd,"x");
-			}
-			close(fd);
+				for(j=1000;j>0;j--) {
+					printf(fd,"x");
+				}
+				close(fd);
 			}
 			exit();
 		}

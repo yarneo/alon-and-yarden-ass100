@@ -196,20 +196,9 @@ void createInternalProcess(const char *name, void (*entrypoint)()) {
 	memset(p->context, 0, sizeof *p->context);
 	p->context->eip = (uint)forkret;
 	swapper = p;
-
-
 	if(!(swapper->pgdir = setupkvm()))
 		panic("swapper: out of memory?");
-	//  inituvm(swapper->pgdir, _binary_initcode_start, (int)_binary_initcode_size);
 	swapper->sz = PGSIZE;
-	//  memset(swapper->tf, 0, sizeof(*swapper->tf));
-	//  swapper->tf->cs = (SEG_UCODE << 3) | DPL_USER;
-	//  swapper->tf->ds = (SEG_UDATA << 3) | DPL_USER;
-	//  swapper->tf->es = swapper->tf->ds;
-	//  swapper->tf->ss = swapper->tf->ds;
-	//  swapper->tf->eflags = FL_IF;
-	//  swapper->tf->esp = PGSIZE;
-	//  swapper->tf->eip = 0;
 	safestrcpy(swapper->name, name, sizeof(swapper->name));
 	swapper->cwd = namei("/");
 	swapper->state = RUNNABLE;
@@ -401,8 +390,8 @@ scheduler(void)
 		for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
 
 			if((p->state != RUNNABLE) || (p->busyswapping != 0)) {
-//				if(p->pid > 3)
-//				cprintf("process: %d, busyswapping: %d\n",p->pid,p->busyswapping);
+				//				if(p->pid > 3)
+				//				cprintf("process: %d, busyswapping: %d\n",p->pid,p->busyswapping);
 				continue;
 			}
 
@@ -566,19 +555,19 @@ kill(int pid)
 int
 sleep2(int n)
 {
-  uint ticks0;
+	uint ticks0;
 
-  acquire(&tickslock);
-  ticks0 = ticks;
-  while(ticks - ticks0 < n){
-    if(proc->killed){
-      release(&tickslock);
-      return -1;
-    }
-    sleep(&ticks, &tickslock);
-  }
-  release(&tickslock);
-  return 0;
+	acquire(&tickslock);
+	ticks0 = ticks;
+	while(ticks - ticks0 < n){
+		if(proc->killed){
+			release(&tickslock);
+			return -1;
+		}
+		sleep(&ticks, &tickslock);
+	}
+	release(&tickslock);
+	return 0;
 }
 
 void
@@ -599,9 +588,9 @@ swap()
 			for(np = &ptable.proc[3]; np < &ptable.proc[NPROC]; np++){
 				if((np->sz <= minsz) && (np->state == RUNNABLE) && (np->swapped == 0) && ((np->sz/PGSIZE) < 18)) {
 					if(np->sz < minsz || (np->sz == minsz && np->swaps < minswa)) {
-					minswa = np->swaps;
-					minsz = np->sz;
-					swapoutproc = np;
+						minswa = np->swaps;
+						minsz = np->sz;
+						swapoutproc = np;
 					}
 				}
 			}
@@ -648,15 +637,12 @@ swap()
 				char* ext = ".swap";
 				itoa(pid,str);
 				char* filename = strcat(str,ext);
-				//cprintf("before open\n");
 				struct file* fout = open2(filename,O_CREATE | O_RDWR,fd);
-				//cprintf("after open\n");
 				for(i = 0; i < (swapoutproc->sz); i+=PGSIZE){
 					if(filewrite(fout, uva2ka(swapoutproc->pgdir, (void *) i), PGSIZE) < 0) {
 						panic("error swapping\n");
 					}
 				}
-				//cprintf("after writing to file");
 				if(swapoutproc->pid != 0)
 					freevm(swapoutproc->pgdir);
 				proc->ofile[fd] = 0;
